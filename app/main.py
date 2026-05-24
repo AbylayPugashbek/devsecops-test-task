@@ -175,16 +175,20 @@ async def ping_host(host: str = Query(...)):
     if not is_safe_hostname(host):
         raise HTTPException(status_code=400, detail="Invalid host")
 
-    # Vuln: Command injection
-    result = subprocess.run(
-        ["ping", "-c", "2", host],
-        capture_output=True,
-        text=True,
-        timeout=5,
-        check=False,
+    try:
+        result = subprocess.run(
+            ["ping", "-c", "2", host],
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=503, detail="Ping tool is not available")
 
-    )
     return {"stdout": result.stdout, "stderr": result.stderr}
+
 
 
 @app.get("/api/v1/tools/dns-lookup")
@@ -193,15 +197,20 @@ async def dns_lookup(domain: str = Query(...)):
     if not is_safe_hostname(domain):
         raise HTTPException(status_code=400, detail="Invalid domain")
 
-    # Vuln: Command injection
-    result = subprocess.run(
-        ["nslookup", domain],
-        capture_output=True,
-        text=True,
-        timeout=5,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["nslookup", domain],
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=503, detail="DNS lookup tool is not available")
+
     return {"result": result.stdout}
+
 
 
 # ===== PATH TRAVERSAL (Vuln: No path validation) =====
