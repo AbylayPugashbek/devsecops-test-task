@@ -9,8 +9,6 @@ services:
       - .env
     environment:
       - ENVIRONMENT=production
-    volumes:
-      - .:/app
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -24,11 +22,10 @@ services:
       - "6379"
     security_opt:
       - no-new-privileges:true
-    cap_drop:
-      - ALL
     read_only: true
     tmpfs:
       - /tmp
+      - /data
     networks:
       - econo-net
 
