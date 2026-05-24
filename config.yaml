@@ -1,0 +1,30 @@
+database:
+  host: db-prod.econo-engine.internal
+  port: 5432
+  name: econo_prod
+  user: econo_admin
+  password_env: POSTGRES_PASSWORD
+
+redis:
+  host: redis-prod.internal
+  port: 6379
+  password_env: REDIS_PASSWORD
+
+jwt:
+  secret_env: JWT_SECRET
+  algorithm: HS256
+
+aws:
+  region: us-east-1
+  access_key_env: AWS_ACCESS_KEY_ID
+  secret_key_env: AWS_SECRET_ACCESS_KEY
+  s3_bucket: econo-engine-prod-data
+
+smtp:
+  host: smtp.gmail.com
+  port: 587
+  user: econo-engine@gmail.com
+  password_env: SMTP_PASSWORD
+
+logging:
+  level: INFO

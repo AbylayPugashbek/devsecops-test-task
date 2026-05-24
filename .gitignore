@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.db
+.pytest_cache/
+# Vuln: .env is NOT listed here — secrets will be committed
+venv/
+node_modules/
+*.log
+.env
+.env.*
+!.env.example
+reports/
