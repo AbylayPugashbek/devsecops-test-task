@@ -307,15 +307,21 @@ async def register(request: Request):
 @app.put("/api/v1/users/{user_id}")
 async def update_user(user_id: int, request: Request):
     """Update user profile."""
-    data = await request.json()
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+
     allowed_fields = {"email"}
     updates = {key: value for key, value in data.items() if key in allowed_fields}
 
     if not updates:
         raise HTTPException(status_code=400, detail="No updatable fields provided")
-    
+
     conn = get_db()
-    # Vuln: User can update any field including role
     if "email" in updates:
         conn.execute(
             "UPDATE users SET email = ? WHERE id = ?",
