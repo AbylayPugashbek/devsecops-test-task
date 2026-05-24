@@ -6,16 +6,47 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
-  secrets:
-    name: Secrets scan
+  security-gates:
+    name: Security gates
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Run Gitleaks
+      - name: SAST - Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: auto
+
+      - name: Secrets scan - Gitleaks
         uses: gitleaks/gitleaks-action@v2
+
+      - name: Dependency scan - Trivy filesystem
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          format: table
+
+      - name: Build Docker image
+        run: docker build -t econo-engine-api:${{ github.sha }} .
+
+      - name: Docker image scan - Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: econo-engine-api:${{ github.sha }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          format: table
