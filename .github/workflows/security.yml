@@ -28,7 +28,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
 
       - name: Dependency scan - Trivy filesystem
-        uses: aquasecurity/trivy-action@0.34.0
+        uses: aquasecurity/trivy-action@0.30.0
         with:
           scan-type: fs
           scan-ref: .
@@ -42,7 +42,7 @@ jobs:
         run: docker build -t econo-engine-api:${{ github.sha }} .
 
       - name: Docker image scan - Trivy
-        uses: aquasecurity/trivy-action@0.34.0
+        uses: aquasecurity/trivy-action@0.30.0
         with:
           image-ref: econo-engine-api:${{ github.sha }}
           scanners: vuln
