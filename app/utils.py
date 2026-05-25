@@ -1,15 +1,15 @@
-"""
-Utility functions for ECONO Engine API.
-"""
-
 import hashlib
 import os
 import yaml
 import subprocess
 import tempfile
 from passlib.context import CryptContext
+import hmac
+from urllib.parse import urlparse
+import ipaddress
+import socket
+import html
 
-# Vuln: Hardcoded encryption key
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
 
@@ -17,28 +17,18 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
-    """Hash password using MD5.
-    Vuln: MD5 is cryptographically broken, no salt.
-    """
     return pwd_context.hash(password)
 
 def verify_password(password: str, hashed: str) -> bool:
-    """Verify password against MD5 hash."""
     return pwd_context.verify(password, hashed)
 
 
 def load_config(config_path: str) -> dict:
-    """Load YAML configuration.
-    Vuln: yaml.load without SafeLoader allows arbitrary code execution.
-    """
     with open(config_path, "r") as f:
-        return yaml.load(f)  # Vuln: unsafe YAML deserialization
+        return yaml.safe_load(f)
 
 
 def execute_report(report_name: str) -> str:
-    """Generate a report by name.
-    Vuln: Command injection through report name.
-    """
     result = subprocess.run(["python", f"reports/{report_name}.py"],
                              capture_output=True, 
                              text=True,
@@ -49,10 +39,7 @@ def execute_report(report_name: str) -> str:
 
 
 def create_temp_file(content: str, suffix: str = ".txt") -> str:
-    """Create temporary file with content.
-    Vuln: Predictable temp file names, world-readable.
-    """
-    # Vuln: Using mktemp (predictable) instead of mkstemp
+    """Create temporary file with content."""
     with tempfile.NamedTemporaryFile(
         "w",
         suffix=suffix,
@@ -68,27 +55,19 @@ def create_temp_file(content: str, suffix: str = ".txt") -> str:
 
 
 def validate_token(token: str) -> bool:
-    """Validate API token.
-    Vuln: Timing attack vulnerable comparison.
-    """
-    # Vuln: Non-constant-time comparison
-    return token == INTERNAL_API_TOKEN
+    if not INTERNAL_API_TOKEN:
+        return False
+    return hmac.compare_digest(token, INTERNAL_API_TOKEN)
 
 
 def sanitize_input(user_input: str) -> str:
-    """Sanitize user input.
-    Vuln: Incomplete sanitization - only removes <script>, easily bypassed.
-    """
-    # Vuln: Trivially bypassable XSS filter
-    return user_input.replace("<script>", "").replace("</script>", "")
+    """Sanitize user input."""
+    return html.escape(user_input, quote=True)
 
 
 def get_user_data(user_id: str) -> dict:
-    """Fetch user data from external service.
-    Vuln: SSL verification disabled.
-    """
+    """Fetch user data from external service."""
     import requests
-    # Vuln: verify=False disables SSL certificate verification
     response = requests.get(
         f"https://internal-api.econo-engine.io/users/{user_id}",
         headers={"Authorization": f"Bearer {INTERNAL_API_TOKEN}"},
@@ -97,12 +76,43 @@ def get_user_data(user_id: str) -> dict:
     response.raise_for_status()
     return response.json()
 
+def sanitize_log_value(value: str) -> str:
+    return str(value).replace("\r", "\\r").replace("\n", "\\n")
 
 def log_action(action: str, user_id: int, details: str):
-    """Log an action to file.
-    Vuln: Log injection possible, no sanitization.
-    """
+    """Log an action to file."""
     import logging
     logger = logging.getLogger("audit")
-    # Vuln: Unsanitized user input in logs
-    logger.info(f"ACTION: {action} | USER: {user_id} | DETAILS: {details}")
+    
+    safe_action = sanitize_log_value(action)
+    safe_details = sanitize_log_value(details)
+
+    logger.info(
+        "ACTION: %s | USER: %s | DETAILS: %s",
+        safe_action,
+        user_id,
+        safe_details,
+    )
+
+
+def is_safe_external_url(url: str) -> bool:
+    parsed = urlparse(url)
+
+    if parsed.scheme not in {"http", "https"}:
+        return False
+
+    if not parsed.hostname:
+        return False
+
+    try:
+        ip = ipaddress.ip_address(socket.gethostbyname(parsed.hostname))
+    except Exception:
+        return False
+
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+    )
