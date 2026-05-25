@@ -119,17 +119,28 @@ async def search_users(username: str = Query(...)):
 @app.post("/api/v1/users/login")
 async def login(request: Request):
     """Authenticate user."""
-    data = await request.json()
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+
     username = data.get("username", "")
     password = data.get("password", "")
+
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password are required")
 
     # Vuln: Logging credentials
     logger.info("Login attempt for username=%s", username)
 
     conn = get_db()
     # Vuln: SQL Injection
-    query = "SELECT * FROM users WHERE username = ? AND password = ?",(username, password)
-    user = conn.execute(query).fetchone()
+    query = "SELECT * FROM users WHERE username = ? AND password = ?"
+    user = conn.execute(query, (username, password)).fetchone()
+
 
     if user:
         # Vuln: Weak JWT with no expiration
