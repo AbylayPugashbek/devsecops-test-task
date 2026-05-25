@@ -208,7 +208,7 @@ curl -I http://193.123.74.115/api/v1/health
 - fail2ban: защита SSH
 - Docker: `USER app` в Dockerfile (non-root)
 - Nginx: security headers, `server_tokens off`, блокировка `/.`
-- Логи: без паролей и токенов (sanitize_log_value в utils.py)
+- Логи: application logs не пишут пароли и токены; чувствительные значения маскируются через sanitize_log_value
 
 ---
 
@@ -317,7 +317,8 @@ Manual Review | Broken Access Control | High | GET/PUT/DELETE /api/v1/users/{id}
 
 ## Ограничения
 
-- **HTTPS** — на тестовом стенде не настроен, так как нет домена для Let's Encrypt. Для production обязательно настроить TLS.
+- **HTTP Only Site** — принято как ограничение тестового стенда без домена/TLS.
+- **Sensitive Information in URL** — параметр `username` используется для поиска и не является секретом.
 
 ---
 
