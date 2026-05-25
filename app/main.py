@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Depends, Query
+from fastapi import FastAPI, HTTPException, Request, Depends, Query, Header
 from fastapi.responses import JSONResponse, FileResponse
 import sqlite3
 import hashlib
@@ -11,7 +11,7 @@ import json
 import base64
 from datetime import datetime, timedelta, timezone
 import re
-from app.utils import hash_password, verify_password, is_safe_external_url
+from app.utils import hash_password, verify_password, is_safe_external_url, is_safe_hostname
 from pathlib import Path
 
 
@@ -34,14 +34,53 @@ app = FastAPI(title="ECONO Engine API", debug=False)
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
+def get_current_user(authorization: str | None = Header(default=None)):
+    """Validate JWT bearer token and return the current user."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization token is required")
+
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Authorization token is required")
+
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user_id = payload.get("user_id")
+    if not isinstance(user_id, int):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    conn = get_db()
+    try:
+        user = conn.execute(
+            "SELECT id, username, email, role FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    return dict(user)
+
+
+def require_user_access(user_id: int, current_user: dict):
+    """Allow admins or the owner of the requested user record."""
+    if current_user["role"] != "admin" and current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+
 def get_db():
     """Get database connection."""
     conn = sqlite3.connect("app.db")
     conn.row_factory = sqlite3.Row
     return conn
-
-def is_safe_hostname(value: str) -> bool:
-    return bool(re.fullmatch(r"[A-Za-z0-9.-]{1,253}", value)) and ".." not in value
 
 def init_db():
     """Initialize database with sample data."""
@@ -149,22 +188,40 @@ async def login(request: Request):
     raise HTTPException(status_code=401, detail="Invalid credentials")
 
 @app.get("/api/v1/users/{user_id}")
-async def get_user(user_id: int):
-    """Get user details - no authorization check."""
+async def get_user(user_id: int, current_user: dict = Depends(get_current_user)):
+    """Get user details for the authenticated user or admin."""
+    require_user_access(user_id, current_user)
+
     conn = get_db()
-    user = conn.execute("SELECT id, username, email, role FROM users WHERE id = ?", (user_id,)).fetchone()
+    try:
+        user = conn.execute(
+            "SELECT id, username, email, role FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
     if user:
         return dict(user)
     raise HTTPException(status_code=404, detail="User not found")
 
 
+
 @app.delete("/api/v1/users/{user_id}")
-async def delete_user(user_id: int):
-    """Delete user - no authorization check."""
+async def delete_user(user_id: int, current_user: dict = Depends(get_current_user)):
+    """Delete user. Admin role is required."""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin role is required")
+
     conn = get_db()
-    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    conn.commit()
+    try:
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
     return {"status": "deleted"}
+
 
 
 @app.get("/api/v1/tools/ping")
@@ -321,8 +378,14 @@ async def register(request: Request):
 
 
 @app.put("/api/v1/users/{user_id}")
-async def update_user(user_id: int, request: Request):
-    """Update user profile."""
+async def update_user(
+    user_id: int,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Update user profile for the authenticated user or admin."""
+    require_user_access(user_id, current_user)
+
     try:
         data = await request.json()
     except Exception:
@@ -338,13 +401,18 @@ async def update_user(user_id: int, request: Request):
         raise HTTPException(status_code=400, detail="No updatable fields provided")
 
     conn = get_db()
-    if "email" in updates:
-        conn.execute(
-            "UPDATE users SET email = ? WHERE id = ?",
-            (updates["email"], user_id),
-        )
-    conn.commit()
+    try:
+        if "email" in updates:
+            conn.execute(
+                "UPDATE users SET email = ? WHERE id = ?",
+                (updates["email"], user_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
     return {"status": "updated"}
+
 
 
 @app.get("/api/v1/debug/config")

@@ -163,7 +163,7 @@ Pipeline включает 5 security gates:
 2. Gitleaks              → секреты в коде  → pipeline падает
 3. Trivy (filesystem)    → HIGH/CRITICAL CVE найдены → pipeline падает
 4. Docker build          → образ собирается
-5. Trivy (image scan)    → Critical CVE     → pipeline падает
+5. Trivy (image scan)    → HIGH/CRITICAL CVE → pipeline падает
 ```
 ![Security Gate](https://github.com/AbylayPugashbek/devsecops-test-task/blob/main/Security_gate.png?raw=true)
 ---
@@ -248,11 +248,75 @@ Accepted risk:
 - `HTTP Only Site` — принято как ограничение тестового стенда без домена/TLS
 - `Sensitive Information in URL` — принято как informational, так как `username` не является секретом уровня `password`, `token`, `api_key`
 
+Дополнительно по результатам manual review была найдена и исправлена уязвимость `Broken Access Control`.
+
+До исправления user-management endpoints были доступны без обязательной проверки JWT-авторизации. Это позволяло выполнять прямые запросы к чужим user records.
+
+После исправления:
+
+- `GET /api/v1/users/{id}` теперь требует `Authorization: Bearer <token>`
+- `PUT /api/v1/users/{id}` теперь требует `Authorization: Bearer <token>`
+- `DELETE /api/v1/users/{id}` доступен только пользователю с ролью `admin`
+- обычный пользователь может читать и обновлять только свой профиль
+
+---
+
+## JWT Authorization
+
+JWT Authorization был добавлен для устранения `Broken Access Control`.  
+До исправления user-management endpoints могли вызываться напрямую без проверки прав пользователя. После исправления API проверяет JWT token из заголовка `Authorization` и разрешает доступ только владельцу профиля или пользователю с ролью `admin`.
+
+Защищенные endpoints:
+
+| Method | Endpoint | Доступ |
+|--------|----------|--------|
+| GET | `/api/v1/users/{id}` | Только владелец профиля или admin |
+| PUT | `/api/v1/users/{id}` | Только владелец профиля или admin |
+| DELETE | `/api/v1/users/{id}` | Только admin |
+
+
+Проверка без токена:
+
+```bash
+curl -i http://193.123.74.115/api/v1/users/1
+```
+
+Ожидаемый результат:
+
+```text
+401 Unauthorized
+```
+
+Получение JWT token:
+
+```bash
+curl -i -X POST "http://193.123.74.115/api/v1/users/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"apitest1","password":"Password123"}'
+```
+
+Проверка с токеном:
+
+```bash
+curl -i "http://193.123.74.115/api/v1/users/1" \
+  -H "Authorization: Bearer <token>"
+```
+
+Если пользователь обращается к чужому профилю:
+
+```text
+403 Forbidden
+```
+
+Итоговый статус finding:
+
+```text
+Manual Review | Broken Access Control | High | GET/PUT/DELETE /api/v1/users/{id} | Fixed
+```
 ---
 
 ## Ограничения
 
-- **Broken Access Control** — endpoints `/api/v1/users/{id}`, `PUT /api/v1/users/{id}` и `DELETE /api/v1/users/{id}` пока не требуют JWT-авторизацию. Часть проблемы исправлена: API больше не возвращает `password` и `api_key`, а mass assignment ограничен разрешенными полями. Полное исправление требует JWT middleware / dependency-based authorization и проверки прав пользователя.
 - **HTTPS** — на тестовом стенде не настроен, так как нет домена для Let's Encrypt. Для production обязательно настроить TLS.
 
 ---

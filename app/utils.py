@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 import yaml
 import subprocess
 import tempfile
@@ -116,3 +117,6 @@ def is_safe_external_url(url: str) -> bool:
         or ip.is_multicast
         or ip.is_reserved
     )
+
+def is_safe_hostname(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9.-]{1,253}", value)) and ".." not in value
