@@ -31,7 +31,7 @@ if not JWT_SECRET:
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # ===== DEBUG MODE IN PRODUCTION (Vuln: Debug enabled) =====
-app = FastAPI(title="ECONO Engine API", debug=True)
+app = FastAPI(title="ECONO Engine API", debug=False)
 
 # ===== LOGGING SENSITIVE DATA (Vuln: Secrets in logs) =====
 logging.basicConfig(level=logging.DEBUG)
