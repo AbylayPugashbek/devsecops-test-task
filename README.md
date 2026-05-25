@@ -165,7 +165,7 @@ Pipeline включает 5 security gates:
 4. Docker build          → образ собирается
 5. Trivy (image scan)    → Critical CVE     → pipeline падает
 ```
-
+![Security Gate](https://github.com/AbylayPugashbek/devsecops-test-task/blob/main/Security_gate.png?raw=true)
 ---
 
 ### Шаг 5 — Hardening сервера
