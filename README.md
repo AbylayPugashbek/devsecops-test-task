@@ -212,7 +212,7 @@ curl -I http://193.123.74.115/api/v1/health
 
 ---
 
-### Шаг 6 — DAST (OWASP ZAP) ✨
+### Шаг 6 — DAST (OWASP ZAP)
 
 DAST-проверка была выполнена через **OWASP ZAP Desktop**.
 
