@@ -78,7 +78,7 @@ semgrep --config auto ./app
 
 **Что было найдено и исправлено:**
 
-**Полный список находок Semgrep (до исправлений — 27 findings):**
+**Сгруппированный список основных находок Semgrep (до исправлений — 27 findings):**
  
 | # | Уязвимость | Файл | Строка (до) | Severity | Статус |
 |---|-----------|------|-------------|----------|--------|
@@ -159,9 +159,9 @@ Pipeline запускается на каждый `push` и `pull_request`.
 Pipeline включает 5 security gates:
 
 ```
-1. Semgrep SAST          → Critical найдены → pipeline падает
+1. Semgrep SAST          → blocking findings найдены → pipeline падает
 2. Gitleaks              → секреты в коде  → pipeline падает
-3. Trivy (filesystem)    → HIGH/CRITICAL CVE найдены  → pipeline падает
+3. Trivy (filesystem)    → HIGH/CRITICAL CVE найдены → pipeline падает
 4. Docker build          → образ собирается
 5. Trivy (image scan)    → Critical CVE     → pipeline падает
 ```
@@ -219,20 +219,41 @@ DAST-проверка была выполнена через **OWASP ZAP Desktop
 Проверялись:
 
 - внешний адрес приложения: `http://193.123.74.115`
+- OpenAPI endpoint: `http://193.123.74.115/openapi.json`
 - отдельные API endpoints вручную через ZAP
 - повторный scan после исправлений
 
 Найденные проблемы:
 
-- `HTTP Only Site` — принято как acceptable risk для тестового стенда без домена/TLS
-- `Application Error Disclosure` — исправлено, API больше не раскрывает traceback
-- `Sensitive Information in URL` — принято как informational, так как `username` не является секретом
+| Finding | Risk | Endpoint | Статус |
+|---|---|---|---|
+| HTTP Only Site | Medium | `http://193.123.74.115/openapi.json` | Accepted risk |
+| Application Error Disclosure | Low | `PUT /api/v1/users/10` | Fixed |
+| Application Error Disclosure | Low | `POST /api/v1/users/login` | Fixed |
+| Application Error Disclosure | Low | `POST /api/v1/data/import` | Fixed |
+| Application Error Disclosure | Low | `POST /api/v1/users/register` | Fixed |
+| Application Error Disclosure | Low | `POST /api/v1/webhooks/test` | Fixed |
+| External Redirect | High | `GET /api/v1/redirect?url=` | Fixed |
+| Sensitive Information in URL | Informational | `GET /api/v1/users/search?username=` | Accepted |
 
 Исправлено:
 
 - отключен FastAPI debug mode в production
 - добавлена обработка пустого/некорректного JSON body
 - вместо `500 Internal Server Error` возвращается контролируемый `400 Bad Request`
+- `External Redirect` исправлен: endpoint `/api/v1/redirect` теперь разрешает только внутренние relative paths и блокирует внешние URL
+
+Accepted risk:
+
+- `HTTP Only Site` — принято как ограничение тестового стенда без домена/TLS
+- `Sensitive Information in URL` — принято как informational, так как `username` не является секретом уровня `password`, `token`, `api_key`
+
+---
+
+## Ограничения
+
+- **Broken Access Control** — endpoints `/api/v1/users/{id}`, `PUT /api/v1/users/{id}` и `DELETE /api/v1/users/{id}` пока не требуют JWT-авторизацию. Часть проблемы исправлена: API больше не возвращает `password` и `api_key`, а mass assignment ограничен разрешенными полями. Полное исправление требует JWT middleware / dependency-based authorization и проверки прав пользователя.
+- **HTTPS** — на тестовом стенде не настроен, так как нет домена для Let's Encrypt. Для production обязательно настроить TLS.
 
 ---
 
@@ -255,10 +276,3 @@ DAST-проверка была выполнена через **OWASP ZAP Desktop
 | GET | `/api/v1/debug/config` | Конфигурация (безопасная) |
 | GET | `/api/v1/debug/env` | Env-метаданные (только ENVIRONMENT, LOG_LEVEL) |
 | GET | `/api/v1/redirect?url=` | Внутренний редирект |
-
----
-
-## Ограничения
-
-- **Broken Access Control** — endpoints `/api/v1/users/{id}`, `PUT /api/v1/users/{id}` и `DELETE /api/v1/users/{id}` пока не требуют JWT-авторизацию. Часть проблемы исправлена: API больше не возвращает `password` и `api_key`, а mass assignment ограничен разрешенными полями. Полное исправление требует JWT middleware / dependency-based authorization и проверки прав пользователя.
-- **HTTPS** — на тестовом стенде не настроен, так как нет домена для Let's Encrypt. Для production обязательно настроить TLS.
